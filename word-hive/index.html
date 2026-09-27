@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Word Hive</title>
+<style>
+  :root {
+    --bg: #fff8ee;
+    --ink: #2b2140;
+    --muted: #7a6f8c;
+    --card: #ffffff;
+    --line: #eadfce;
+    --hex: #efe6d8;
+    --hex-ink: #2b2140;
+    --centre: #f7b928;
+    --centre-ink: #2b2140;
+    --good: #3aa37a;
+    --bad: #d9534f;
+    --shadow: 0 6px 20px rgba(60, 40, 90, .10);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1827;
+      --ink: #f4eefc;
+      --muted: #a79cba;
+      --card: #28223a;
+      --line: #3a3350;
+      --hex: #3a3350;
+      --hex-ink: #f4eefc;
+      --centre: #f7b928;
+      --good: #4fc497;
+      --bad: #ff7b76;
+      --shadow: 0 6px 20px rgba(0, 0, 0, .35);
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main {
+    max-width: 900px; margin: 0 auto; padding: 32px 16px 64px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: start;
+  }
+  @media (max-width: 720px) { main { grid-template-columns: 1fr; gap: 20px; } }
+  header { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: end; gap: 8px 16px; }
+  h1 { margin: 0; font-size: 2rem; letter-spacing: -.02em; }
+  .sub { margin: 0; color: var(--muted); flex: 1 1 260px; }
+  .top-btns { display: flex; gap: 8px; }
+
+  .play { display: flex; flex-direction: column; align-items: center; gap: 18px; }
+  .entry {
+    min-height: 2.6rem; font-size: 1.8rem; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase; text-align: center; width: 100%;
+    border-bottom: 2px solid var(--line);
+  }
+  .entry .c { color: var(--centre); }
+  .entry .x { color: var(--muted); }
+  .entry.shake { animation: shake .3s; }
+  @keyframes shake { 25% { transform: translateX(-8px); } 75% { transform: translateX(8px); } }
+  .msg { min-height: 1.6rem; font-weight: 650; }
+  .msg.good { color: var(--good); }
+  .msg.bad { color: var(--bad); }
+
+  .hive { position: relative; width: 246px; height: 232px; }
+  .cell {
+    position: absolute; width: 84px; height: 72px; margin: 2px; border: 0; padding: 0;
+    clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
+    background: var(--hex); color: var(--hex-ink);
+    font: 700 1.6rem/1 system-ui, sans-serif; text-transform: uppercase; cursor: pointer;
+    transition: transform .08s;
+  }
+  .cell:active { transform: scale(.92); }
+  .cell.centre { background: var(--centre); color: var(--centre-ink); }
+
+  .controls { display: flex; gap: 10px; }
+  button.pill {
+    font: inherit; font-weight: 650; border-radius: 999px; padding: 10px 18px; cursor: pointer;
+    background: transparent; color: var(--ink); border: 2px solid var(--line);
+  }
+  button.pill.small { padding: 6px 14px; font-size: .9rem; }
+  button.pill.primary { background: var(--centre); border-color: var(--centre); color: var(--centre-ink); }
+
+  .panel {
+    background: var(--card); border-radius: 16px; box-shadow: var(--shadow); padding: 18px;
+  }
+  .rank { display: flex; justify-content: space-between; align-items: baseline; font-weight: 700; }
+  .rank small { color: var(--muted); font-weight: 500; }
+  .bar { height: 10px; background: var(--hex); border-radius: 999px; margin: 10px 0 4px; overflow: hidden; }
+  .bar div { height: 100%; background: var(--centre); width: 0; transition: width .3s; }
+  .stats { color: var(--muted); font-size: .9rem; }
+  h2 { font-size: 1rem; margin: 18px 0 8px; }
+  .found { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+  .found li {
+    padding: 3px 10px; border-radius: 999px; background: var(--hex); text-transform: capitalize;
+  }
+  .found li.pangram { background: var(--centre); color: var(--centre-ink); font-weight: 700; }
+  .found li.missed { background: transparent; border: 1px dashed var(--line); color: var(--muted); }
+  .empty { color: var(--muted); font-style: italic; }
+  .hint { color: var(--muted); font-size: .85rem; text-align: center; margin: 0; }
+  details { margin-top: 16px; color: var(--muted); font-size: .9rem; }
+  summary { cursor: pointer; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>🐝 Word Hive</h1>
+    <p class="sub">Make words from the hive. Every word must use the gold centre letter.</p>
+    <div class="top-btns">
+      <button class="pill small" id="today">Today</button>
+      <button class="pill small" id="random">New puzzle</button>
+    </div>
+  </header>
+
+  <section class="play">
+    <div class="entry" id="entry" aria-live="polite"></div>
+    <div class="msg" id="msg" aria-live="polite"></div>
+    <div class="hive" id="hive"></div>
+    <div class="controls">
+      <button class="pill" id="del">Delete</button>
+      <button class="pill" id="shuffle" title="Shuffle">🔀</button>
+      <button class="pill primary" id="enter">Enter</button>
+    </div>
+    <p class="hint">Type on your keyboard, or tap the letters.</p>
+  </section>
+
+  <section class="panel">
+    <div class="rank"><span id="rank"></span><small id="puzzle-name"></small></div>
+    <div class="bar"><div id="bar"></div></div>
+    <div class="stats" id="stats"></div>
+    <h2>Words found</h2>
+    <ul class="found" id="found"></ul>
+    <details>
+      <summary>Rules and scoring</summary>
+      <p>Words need 4 or more letters and must use the centre letter. Letters can be reused.
+      A 4-letter word scores 1 point, and longer words score 1 point per letter. A word that
+      uses all 7 letters is a <b>pangram</b> and earns 7 bonus points.</p>
+      <p><button class="pill small" id="reveal">Give up and show all answers</button></p>
+    </details>
+  </section>
+</main>
+
+<script src="words.js"></script>
+<script>
+const DICT = WORDS.split(" ");
+const ALL_PUZZLES = PUZZLES.split(" ");
+const RANKS = [
+  [0, "Beginner 🥚"], [0.05, "Buzzing 🐛"], [0.15, "Busy Bee 🐝"],
+  [0.3, "Honey Maker 🍯"], [0.5, "Hive Hero 🌟"], [0.75, "Queen Bee 👑"]
+];
+// Positions of the six outer cells (x, y) around the centre, in px.
+const RING = [[88, 0], [154, 38], [154, 114], [88, 152], [22, 114], [22, 38]];
+const CENTRE_POS = [88, 76];
+const EPOCH = Date.UTC(2026, 0, 1);
+
+const $ = id => document.getElementById(id);
+let game;
+
+function score(word) {
+  const base = word.length === 4 ? 1 : word.length;
+  return base + (new Set(word).size === 7 ? 7 : 0);
+}
+
+function load(index) {
+  const key = ALL_PUZZLES[index];
+  const centre = key[0];
+  const letters = new Set(key);
+  const answers = DICT.filter(w => w.includes(centre) && [...w].every(ch => letters.has(ch)));
+  let found = [];
+  try { found = JSON.parse(localStorage.getItem("word-hive-" + key)) || []; } catch {}
+  game = {
+    index, key, centre,
+    outer: key.slice(1).split(""),
+    answers: new Set(answers),
+    max: answers.reduce((s, w) => s + score(w), 0),
+    pangrams: answers.filter(w => new Set(w).size === 7).length,
+    found, typed: "", revealed: false
+  };
+  try { localStorage.setItem("word-hive-last", String(index)); } catch {}
+  renderHive();
+  renderAll();
+}
+
+function todayIndex() {
+  const days = Math.floor((Date.now() - EPOCH) / 86400000);
+  return ((days % ALL_PUZZLES.length) + ALL_PUZZLES.length) % ALL_PUZZLES.length;
+}
+
+function renderHive() {
+  const hive = $("hive");
+  hive.innerHTML = "";
+  const cells = [[game.centre, CENTRE_POS, true], ...game.outer.map((l, i) => [l, RING[i], false])];
+  for (const [letter, [x, y], isCentre] of cells) {
+    const b = document.createElement("button");
+    b.className = "cell" + (isCentre ? " centre" : "");
+    b.style.left = x + "px";
+    b.style.top = y + "px";
+    b.textContent = letter;
+    b.setAttribute("aria-label", "Letter " + letter.toUpperCase());
+    b.onclick = () => type(letter);
+    hive.appendChild(b);
+  }
+}
+
+function renderEntry() {
+  const hiveLetters = new Set(game.key);
+  $("entry").innerHTML = [...game.typed].map(ch => {
+    const cls = ch === game.centre ? "c" : hiveLetters.has(ch) ? "" : "x";
+    return `<span class="${cls}">${ch}</span>`;
+  }).join("");
+}
+
+function renderAll() {
+  renderEntry();
+  const pts = game.found.reduce((s, w) => s + score(w), 0);
+  const ratio = game.max ? pts / game.max : 0;
+  const rank = RANKS.filter(([r]) => ratio >= r).pop()[1];
+  $("rank").textContent = rank;
+  $("bar").style.width = Math.min(100, ratio * 100) + "%";
+  $("puzzle-name").textContent =
+    game.index === todayIndex() ? "Today's hive" : "Hive #" + (game.index + 1);
+  $("stats").textContent =
+    `${pts} of ${game.max} points · ${game.found.length} of ${game.answers.size} words · ` +
+    `${game.found.filter(w => new Set(w).size === 7).length} of ${game.pangrams} ` +
+    `pangram${game.pangrams === 1 ? "" : "s"}`;
+
+  const ul = $("found");
+  ul.innerHTML = "";
+  const shown = game.revealed ? [...game.answers] : game.found;
+  if (!shown.length) {
+    ul.innerHTML = `<li class="empty">No words yet. Try one!</li>`;
+    return;
+  }
+  for (const w of [...shown].sort()) {
+    const li = document.createElement("li");
+    li.textContent = w;
+    if (new Set(w).size === 7) li.classList.add("pangram");
+    if (game.revealed && !game.found.includes(w)) li.classList.add("missed");
+    ul.appendChild(li);
+  }
+}
+
+let msgTimer;
+function say(text, kind) {
+  const m = $("msg");
+  m.textContent = text;
+  m.className = "msg " + (kind || "");
+  clearTimeout(msgTimer);
+  msgTimer = setTimeout(() => { m.textContent = ""; }, 1600);
+}
+
+function type(ch) {
+  if (game.typed.length < 19) { game.typed += ch; renderEntry(); }
+}
+function backspace() { game.typed = game.typed.slice(0, -1); renderEntry(); }
+
+function reject(text) {
+  say(text, "bad");
+  const e = $("entry");
+  e.classList.remove("shake"); void e.offsetWidth; e.classList.add("shake");
+  setTimeout(() => { game.typed = ""; renderEntry(); }, 350);
+}
+
+function submit() {
+  const w = game.typed;
+  if (!w) return;
+  if (game.revealed) return reject("Answers are showing. Try a new puzzle!");
+  if (w.length < 4) return reject("Too short");
+  if ([...w].some(ch => !game.key.includes(ch))) return reject("Bad letters");
+  if (!w.includes(game.centre)) return reject("Missing centre letter");
+  if (game.found.includes(w)) return reject("Already found");
+  if (!game.answers.has(w)) return reject("Not in word list");
+
+  game.found.push(w);
+  try { localStorage.setItem("word-hive-" + game.key, JSON.stringify(game.found)); } catch {}
+  const pts = score(w);
+  const pangram = new Set(w).size === 7;
+  say(pangram ? `Pangram! +${pts} 🎉` : ["Nice!", "Good!", "Great!", "Sweet!"][Math.min(3, w.length - 4)] + ` +${pts}`, "good");
+  game.typed = "";
+  renderAll();
+}
+
+function shuffle() {
+  for (let i = game.outer.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [game.outer[i], game.outer[j]] = [game.outer[j], game.outer[i]];
+  }
+  renderHive();
+}
+
+$("del").onclick = backspace;
+$("enter").onclick = submit;
+$("shuffle").onclick = shuffle;
+$("today").onclick = () => load(todayIndex());
+$("random").onclick = () => {
+  let i;
+  do { i = Math.floor(Math.random() * ALL_PUZZLES.length); } while (i === game.index);
+  load(i);
+};
+$("reveal").onclick = () => { game.revealed = true; renderAll(); };
+
+document.addEventListener("keydown", e => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === "Enter") { e.preventDefault(); submit(); }
+  else if (e.key === "Backspace") { e.preventDefault(); backspace(); }
+  else if (e.key === " ") { e.preventDefault(); shuffle(); }
+  else if (/^[a-z]$/i.test(e.key)) type(e.key.toLowerCase());
+});
+
+let start = todayIndex();
+try {
+  const last = Number(localStorage.getItem("word-hive-last"));
+  if (localStorage.getItem("word-hive-last") !== null && ALL_PUZZLES[last]) start = last;
+} catch {}
+load(start);
+</script>
+</body>
+</html>
